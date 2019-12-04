@@ -1,0 +1,286 @@
+name: myproject
+goModule: github.com/zhuharev/myproject
+version: 0.0.2
+services:
+  - name: user
+    plural: users
+    models:
+      - user
+    deps: []
+    methods:
+      - name: setBdate
+        args:
+          - column:
+              name: bdate
+              type: date
+        return:
+          - name: bdate
+            type: date
+      - name: byId
+        description: Возвращает пользователя по id.
+        args:
+          - column:
+              name: id
+              type: int
+              modelName: user
+            isRestParam: true
+        return:
+          - name: user
+            type: model
+            modelName: user
+      - name: byPhone
+        args:
+          - column:
+              name: phone
+              type: string
+              modelName: user
+            isRestParam: false
+        return:
+          - name: user
+            type: model
+            modelName: user
+      - name: list
+        return:
+          - name: users
+            type: "[]model"
+            modelName: user
+      - name: update
+        args:
+          - column:
+              name: user
+              type: model
+              modelName: user
+            isRestParam: false
+        return: []
+  - name: auth
+    plural: auth
+    models: []
+    deps:
+      - name: user
+    methods:
+      - name: login
+        args:
+          - column:
+              name: phone
+              type: string
+              modelName: ""
+            isRestParam: false
+          - column:
+              name: password
+              type: password
+              modelName: ""
+            isRestParam: false
+        return: []
+      - name: sendCode
+        args: []
+        return: []
+  - name: messenger
+    plural: messenger
+    models:
+      - dialog
+      - dialogMember
+    deps: []
+    methods:
+      - name: byId
+        args:
+          - column:
+              name: id
+              type: int
+              modelName: dialog
+            isRestParam: true
+        return:
+          - name: dialog
+            type: model
+            modelName: dialog
+  - name: qiwi
+    plural: qiwi
+    type: integration
+    models:
+      - transaction
+    methods:
+      - name: backgroundJob
+        runInBackground:
+          config: "10 seconds"
+      - name: transactions
+        args:
+          - column:
+              name: accessToken
+              type: string
+          - column:
+              name: walletId
+              type: string
+        return:
+          - name: transactions
+            type: "[]model"
+            modelName: transaction
+      - name: payout
+        args:
+          - column:
+              name: accessToken
+              type: string
+          - column:
+              name: amount
+              type: float
+          - column:
+              name: currency
+              type: string
+          - column:
+              name: account
+              type: string
+        return:
+          - name: txId
+            type: int
+  - name: paymentSystem
+    deps:
+      - name: qiwi
+models:
+  - name: group
+    relations:
+      - to: user
+        name: users
+    columns:
+      - name: title
+        type: string
+  - name: transaction
+    columns:
+      - name: id
+        type: int
+      - name: provider
+        type: string
+      - name: amount
+        type: float
+      - name: currency
+        type: string
+  - name: user
+    type: entity
+    relations:
+      - to: group
+        name: groups
+        ref: users
+      - to: transaction
+        name: signUp
+      - to: transaction
+        name: signOut
+    columns:
+      - name: images
+        type: "[]string"
+      - name: id
+        type: int
+        modelName: ""
+        validation:
+          required: true
+          min:
+            description: Минимальное значение
+            value: 1
+      - name: bdate
+        type: date
+      - name: avatarURL
+        type: file
+      - name: status
+        type: enum
+        modelName: user
+        enums:
+          - name: active
+          - name: disabled
+          - name: deleted
+      - name: role
+        type: enum
+        modelName: user
+        enums:
+          - name: guest
+          - name: moderator
+          - name: supervisor
+          - name: admin
+      - name: username
+        type: string
+        modelName: ""
+        validation:
+          unique: true
+          required: true
+      - name: firstName
+        type: string
+        validation:
+          required: true
+        modelName: ""
+      - name: lastName
+        type: string
+        modelName: ""
+      - name: phone
+        type: string
+        modelName: ""
+        validation:
+          isPhone: true
+          required: true
+      - name: createdAt
+        type: time
+        modelName: ""
+        validation:
+          required: true
+          age:
+            value: "16 years"
+      - name: updatedAt
+        type: time
+        modelName: ""
+      - name: tags
+        type: "[]model"
+        modelName: tag
+  - name: dialog
+    type: entity
+    columns:
+      - name: id
+        type: int
+        modelName: ""
+      - name: createdAt
+        type: time
+        modelName: ""
+  - name: dialogMember
+    type: relation
+    columns:
+      - name: userId
+        type: int
+        modelName: ""
+      - name: dialogId
+        type: int
+        modelName: ""
+      - name: createdAt
+        type: time
+        modelName: ""
+  - name: tag
+    columns:
+      - name: id
+        type: int
+      - name: title
+        type: string
+  - name: category
+    columns:
+      - name: id
+        type: int
+      - name: title
+        type: string
+forms:
+  - name: users
+    title: "Пользователи"
+    createMethod: "users.create"
+    updateMethod: "users.update"
+    listMethod: "users.list"
+    autocompleteMethods:
+      - columnName: tagIds
+        method: "tags.autocomplete"
+uploadServers:
+  - name: avatars
+    fileName: file
+    description: "Квадратное изображение с портретным фото, максимальный размер: 200Кб."
+    preprocess:
+      thumbnail:
+        width: 640
+        height: 640
+    validation:
+      max:
+        value: 200000
+      mime: "image/jpeg"
+      image:
+        aspectRatio: 1
+        minWidth: 640
+        maxWidth: 2000
+        minHeight: 640
+        maxHeight: 2000

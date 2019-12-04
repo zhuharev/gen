@@ -1,0 +1,59 @@
+package app
+
+import (
+	"fmt"
+
+	{{ range  (domainServices .project) }}
+    "{{ $.project.GoModule }}/domain/{{ .Name }}"
+    {{ end }}
+
+	"github.com/gobuffalo/packr/v2"
+	"gopkg.in/yaml.v2"
+)
+
+// Config is main app config
+type Config struct {
+	AppName string `yaml:"appName"`
+	Env     string
+	DB      struct {
+		DSN string `yaml:"dsn"`
+	} `yaml:"db"`
+	JWTSecret string `yaml:"jwtSecret"`
+	Upload    struct {
+		Server string
+		Key    string
+		Secret string
+	}
+
+	{{ range (domainServices .project) }}
+	{{ titleName .Name }} {{ .Name }}.Config
+	{{ end }}
+}
+
+// LoadConfig load config from fs, or pakred config
+func LoadConfig(env string) (Config, error) {
+	if env == "" {
+		env = "local"
+	}
+
+	box := packr.New("conf", "./conf")
+
+	s, err := box.FindString("conf/config.yml")
+	if err != nil {
+		return Config{}, err
+	}
+
+	var configs []Config
+
+	err = yaml.Unmarshal([]byte(s), &configs)
+	if err != nil {
+		return Config{}, err
+	}
+
+	for _, cfg := range configs {
+		if cfg.Env == env {
+			return cfg, nil
+		}
+	}
+	return Config{}, fmt.Errorf("env config not found")
+}

@@ -1,0 +1,37 @@
+package {{ .service.Name }}
+
+import (
+    "context"
+
+    "{{ .project.GoModule }}/domain"
+    {{ range .service.Deps }}
+    "{{ serviceImport $.project .Name }}"{{end}}
+
+    "go.uber.org/zap"
+)
+
+type UsecaseImp struct{
+  {{ if (isServiceWithRepo .service)}}repo *Repo{{ end }}
+  {{ range .service.Deps }}
+  {{.Name}}Uc {{servicePkg $.project .Name}}.{{usecaseName $.project .Name}}
+  {{end}}
+
+  *zap.Logger
+}
+
+func NewUsecase(logger *zap.Logger, {{ if (isServiceWithRepo .service)}}repo *Repo,{{end}} {{ range .service.Deps }}{{.Name}}Uc {{servicePkg $.project .Name}}.{{usecaseName $.project .Name}},{{end}}) Usecase {
+    return &UsecaseImp{
+        {{ if (isServiceWithRepo .service)}}repo: repo,{{end}}
+        {{ range .service.Deps }}
+        {{.Name}}Uc:  {{.Name}}Uc,
+        {{end}}
+        Logger: logger,
+    }
+}
+
+{{ range .service.Methods }}
+func (uc *UsecaseImp) {{ titleName .Name }}(ctx context.Context, {{range  .Args }}{{ .Name }} {{ goType2 $.project .Column }}, {{end}}) ({{ range .Return }} {{ goType2 $.project . }} ,{{ end }}error) {
+    {{ usecaseBody .}}
+}
+{{end}}
+

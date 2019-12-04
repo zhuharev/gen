@@ -1,0 +1,166 @@
+package storm
+
+import (
+    "strings"
+    "context"
+    "log"
+
+    "{{ .project.GoModule }}/infrastructure"
+    "{{ .project.GoModule }}/domain"
+
+    "github.com/asdine/storm"
+    "github.com/asdine/storm/q"
+)
+
+type Repo struct {
+    db storm.Node
+}
+
+func init() {
+    infrastructure.RegisterDatabase("storm", NewDatabase)
+}
+
+func NewDatabase(dsn string) (infrastructure.Database, error) {
+    dsn = strings.TrimPrefix(dsn, "storm://")
+    db, err := storm.Open(dsn)
+    if err != nil {
+        return nil, fmt.Errorf("open databse: %w", err)
+    }
+    return &Repo{
+        db: db,
+    }, nil
+}
+
+func (r *Repo) ColumnByName(name string) string {
+    return name
+}
+
+func (r *Repo) Create(_ context.Context, model interface{}) error {
+    return r.db.Save(model)
+}
+
+func (r *Repo) Delete(_ context.Context, model interface{}) error {
+    return r.db.DeleteStruct(model)
+}
+
+func (r *Repo) Update(_ context.Context, model interface{}) error {
+    return r.db.Update(model)
+}
+
+func (r *Repo) UpdateField(ctx context.Context, model interface{}, field infrastructure.Field, fields ...infrastructure.Field) error {
+    fieldsToUpdate := append([]infrastructure.Field{field}, fields...)
+    tx, err := r.db.Begin(true)
+    if err != nil {
+    return err
+    }
+    defer tx.Rollback()
+
+    for _, field := range fieldsToUpdate {
+        err := tx.UpdateField(model, field.Name, field.Value)
+        if err != nil {
+            return err 
+        }
+    }
+
+    return tx.Commit()
+}
+
+func (r *Repo) GetByID(_ context.Context, id int, model interface{}) error {
+	err := r.db.One("ID", id, model)
+    if err == storm.ErrNotFound {
+        return infrastructure.ErrNotFound
+    }
+	return err
+}
+
+func (r *Repo) GetByField(_ context.Context, fieldName string, value interface{}, result interface{}) error {
+	err := r.db.One(fieldName, value, result)
+    if err == storm.ErrNotFound {
+        return infrastructure.ErrNotFound
+    }
+	return err
+}
+
+func (r *Repo) ListByField(_ context.Context, fieldName string, value interface{}, result interface{}) error {
+	err := r.db.Find(fieldName, value, result, storm.Reverse())
+    if err == storm.ErrNotFound {
+        return infrastructure.ErrNotFound
+    }
+	return err
+}
+
+func (r *Repo) ListByFields(_ context.Context, fields []infrastructure.Field, result interface{}) error {
+    var matchers []q.Matcher
+    for _, f := range fields {
+        switch f.CompareType {
+            case infrastructure.CompareTypeIn:
+                matchers = append(matchers, q.In(f.Name, f.Value))
+            case infrastructure.CompareTypeEq:
+                matchers = append(matchers, q.Eq(f.Name, f.Value))
+            default:
+                return fmt.Errorf("unknown compare type: %d", f.CompareType)
+        }
+    }
+    err := r.db.Select(matchers...).Find(result)
+    if err == storm.ErrNotFound {
+        return infrastructure.ErrNotFound
+    }
+    return err
+}
+
+func (r *Repo) CountByFields(_ context.Context, fields []infrastructure.Field, result interface{}) (int, error) {
+    var matchers []q.Matcher
+    for _, f := range fields {
+        switch f.CompareType {
+            case infrastructure.CompareTypeIn:
+                matchers = append(matchers, q.In(f.Name, f.Value))
+            case infrastructure.CompareTypeEq:
+                matchers = append(matchers, q.Eq(f.Name, f.Value))
+            default:
+                return 0, fmt.Errorf("unknown compare type: %d", f.CompareType)
+        }
+    }
+    return r.db.Select(matchers...).Count(result)
+}
+
+func (r *Repo) GetByFields(_ context.Context, fields []infrastructure.Field, result interface{}) error {
+    var matchers []q.Matcher
+    for _, f := range fields {
+        switch f.CompareType {
+            case infrastructure.CompareTypeIn:
+                matchers = append(matchers, q.In(f.Name, f.Value))
+            case infrastructure.CompareTypeEq:
+                matchers = append(matchers, q.Eq(f.Name, f.Value))
+            default:
+                return fmt.Errorf("unknown compare type: %d", f.CompareType)
+        }
+    }
+    err := r.db.Select(matchers...).First(result)
+    if err == storm.ErrNotFound {
+        return infrastructure.ErrNotFound
+    }
+    return err
+}
+
+func (r *Repo) List(_ context.Context, to interface{}) error {
+    err := r.db.AllByIndex("ID", to, storm.Reverse())
+    if err == storm.ErrNotFound {
+        return infrastructure.ErrNotFound
+    }
+    return err
+}
+
+func (r *Repo) RunInTransaction(ctx context.Context, fn func(context.Context, infrastructure.Database) error) error {
+    tx, err := r.db.Begin(true)
+    if err != nil {
+    return err
+    }
+    defer tx.Rollback()
+
+    err = fn(ctx, &Repo{db: tx})
+    if err != nil {
+        return err
+    }
+
+    return tx.Commit()
+}

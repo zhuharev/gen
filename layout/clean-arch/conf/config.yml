@@ -1,0 +1,9 @@
+- env: local
+  appName: myApp
+  db:
+    dsn: storm://./data/db.bolt
+  jwtSecret: secret_token
+  upload:
+    server: ""
+    key: ""
+    secret: ""

@@ -1,0 +1,31 @@
+package main
+
+import (
+	"log"
+
+	"{{ .project.GoModule }}/app"
+
+	"go.uber.org/zap"
+)
+
+const version = "0.0.1"
+
+func main() {
+	cfg, err := app.LoadConfig("")
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	logger, _ := zap.NewProduction()
+	defer logger.Sync()
+
+	logger.Info("start app version={{ .project.Version }}")
+
+	a, err := app.New(logger, cfg)
+	if err != nil {
+		log.Fatalf("could't start app err=%s", err)
+	}
+	if err := a.Run(); err != nil {
+		log.Fatalf("app run err=%s", err)
+	}
+}

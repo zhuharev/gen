@@ -1,0 +1,33 @@
+# {{ .project.Name }}
+
+## Namespaces
+{{/* Services ToC */}}
+{{ range (domainServices .project) }}- [{{ .Name }}](#{{ .Name }})
+{{ end }}
+
+{{- /* Services Methods ToC */ -}}
+{{ range (domainServices .project) }}### {{ .Name }}{{$service := .}}
+{{range .Methods}}- [{{ .Name }}](#{{ $service.Name }}.{{ .Name }})
+{{end}}
+{{range .Methods}}#### {{ $service.Name }}.{{ .Name }}
+{{/* Method description */}}
+{{ .Description }}
+{{ if (hasParam . )}}
+Rest endpoint: `{{ httpRESTMethod . }}  /{{ $service.Plural }}/:{{ paramName . }}`
+{{else}}
+Rest endpoint: `{{ httpRESTMethod . }}  /{{ $service.Plural }}/{{ .Name }}`{{end}}
+
+##### Params
+{{ range .Args }}- `{{ .Name }}` (type: `{{ goType2 $.project .Column }}`)
+{{ end }}
+##### Return
+{{ range .Return }}- `{{ .Name }}` (type: `{{ goType2 $.project . }}`)
+{{ end }}
+{{ end }}
+{{ end }}
+
+## Models
+{{ range .project.Models }}### {{ .Name }}
+{{ range .Columns }}- `{{ .Name }}` (type: `{{ goType2 $.project . }}`)
+{{ end }}
+{{ end }}

@@ -1,0 +1,9 @@
+
+{{ range .service.Methods }}
+{{ if (isImplementedMethod $.implemented (titleName .Name))}}{{else}}
+func (uc *UsecaseImp) {{ titleName .Name }}(ctx context.Context, {{range  .Args }}{{ .Name }} {{ goType2 $.project .Column }}, {{end}}) ({{ range .Return }} {{ goType2 $.project . }} ,{{ end }}error) {
+    {{ usecaseBody .}}
+}
+{{end}}
+{{end}}
+
