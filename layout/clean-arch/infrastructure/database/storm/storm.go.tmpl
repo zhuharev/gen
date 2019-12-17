@@ -81,15 +81,28 @@ func (r *Repo) GetByField(_ context.Context, fieldName string, value interface{}
 	return err
 }
 
-func (r *Repo) ListByField(_ context.Context, fieldName string, value interface{}, result interface{}) error {
-	err := r.db.Find(fieldName, value, result, storm.Reverse())
+func (r *Repo) ListByField(_ context.Context, fieldName string, value interface{}, result interface{}, opts ...infrastructure.ListOptions) error {
+	findOptions := []func(q *index.Options){
+        storm.Reverse(),    
+    }
+    if len(opts) > 0 {
+        if opts[0].PageSize != 0 {
+            skip := opts[0].PageSize * opts[0].Page
+            findOptions = append(findOptions, storm.Skip(skip), storm.Limit(opts[0].PageSize))
+        } else if opts[0].Page != 0 {
+            pageSize := 25
+            skip := pageSize * opts[0].Page
+            findOptions = append(findOptions, storm.Skip(skip), storm.Limit(pageSize))
+        }
+    }
+    err := r.db.Find(fieldName, value, result, findOptions...)
     if err == storm.ErrNotFound {
         return infrastructure.ErrNotFound
     }
 	return err
 }
 
-func (r *Repo) ListByFields(_ context.Context, fields []infrastructure.Field, result interface{}) error {
+func (r *Repo) ListByFields(_ context.Context, fields []infrastructure.Field, result interface{}, opts ...infrastructure.ListOptions) error {
     var matchers []q.Matcher
     for _, f := range fields {
         switch f.CompareType {
@@ -101,6 +114,23 @@ func (r *Repo) ListByFields(_ context.Context, fields []infrastructure.Field, re
                 return fmt.Errorf("unknown compare type: %d", f.CompareType)
         }
     }
+
+    q := r.db.Select(matchers...)
+    q.Reverse()
+    if len(opts) > 0 {
+        if opts[0].PageSize != 0 {
+            skip := opts[0].PageSize * opts[0].Page
+            q.Skip(skip)
+            q.Limit(opts[0].PageSize)
+        } else if opts[0].Page != 0 {
+            pageSize := 25
+            skip := pageSize * opts[0].Page
+            q.Skip(skip)
+            q.Limit(pageSize)
+        }
+    }
+
+
     err := r.db.Select(matchers...).Find(result)
     if err == storm.ErrNotFound {
         return infrastructure.ErrNotFound
@@ -142,8 +172,21 @@ func (r *Repo) GetByFields(_ context.Context, fields []infrastructure.Field, res
     return err
 }
 
-func (r *Repo) List(_ context.Context, to interface{}) error {
-    err := r.db.AllByIndex("ID", to, storm.Reverse())
+func (r *Repo) List(_ context.Context, to interface{},opts ...infrastructure.ListOptions) error {
+	findOptions := []func(q *index.Options){
+        storm.Reverse(),    
+    }
+    if len(opts) > 0 {
+        if opts[0].PageSize != 0 {
+            skip := opts[0].PageSize * opts[0].Page
+            findOptions = append(findOptions, storm.Skip(skip), storm.Limit(opts[0].PageSize))
+        } else if opts[0].Page != 0 {
+            pageSize := 25
+            skip := pageSize * opts[0].Page
+            findOptions = append(findOptions, storm.Skip(skip), storm.Limit(pageSize))
+        }
+    }
+    err := r.db.AllByIndex("ID", to, findOptions...)
     if err == storm.ErrNotFound {
         return infrastructure.ErrNotFound
     }

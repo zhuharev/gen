@@ -23,9 +23,9 @@ type Database interface {
 	GetByID(context.Context, int, interface{}) error
 	GetByField(context.Context, string, interface{}, interface{}) error
 	GetByFields(context.Context, []Field, interface{}) error
-	List(context.Context, interface{}) error
-	ListByField(context.Context, string, interface{}, interface{}) error
-	ListByFields(context.Context, []Field, interface{}) error
+	List(context.Context, interface{}, ...ListOptions) error
+	ListByField(context.Context, string, interface{}, interface{}, ...ListOptions) error
+	ListByFields(context.Context, []Field, interface{}, ...ListOptions) error
 	CountByFields(context.Context, []Field, interface{}) (int, error)
 	Delete(context.Context, interface{}) error
 	RunInTransaction(context.Context, func(context.Context, Database) error) error
@@ -44,6 +44,11 @@ const (
 	CompareTypeEq CompareType = iota
 	CompareTypeIn
 )
+
+type ListOptions struct {
+	Page     int
+	PageSize int
+}
 
 var (
 	registeredDatabases = map[string]func(dsn string) (Database, error){}

@@ -180,7 +180,7 @@ func (e *EchoDelivery) {{ titleName .Name }}(c echo.Context) error {
 	if validationErrors := convert{{ titleName .Name }}ToDomain(r.{{ titleName .Name }}).Validate(); len(validationErrors) > 0 {
 		return c.JSON(500, Error{Code: 400, Message: "validation errors", ValidationErrors: validationErrors})
 	}{{ end }}{{end}}
-	{{ range .Return }} {{ .Name }} ,{{ end }}err := e.usecase.{{ titleName .Name }}(ctx, {{ range .Args }}{{ if isModel $.project .Column}} convert{{ titleName .Name }}ToDomain(r.{{ titleName .Name }}){{ else }}r.{{ titleName .Name }}{{ end }},{{ end }})
+	{{ range .Return }} {{ .Name }} ,{{ end }}err := e.usecase.{{ titleName .Name }}(ctx, {{ range .Args }}{{ if isModel $.project .Column}} convert{{ titleName .Name }}ToDomain(r.{{ titleName .Name }}){{ else if eq .Type "date" }}time.Time(r.{{ titleName .Name }}){{ else }}r.{{ titleName .Name }}{{ end }},{{ end }})
 	if err != nil {
 		log.Printf("err call method err=%s", err)
 		return c.JSON(500, Error{Code: 500, Message: err.Error()})

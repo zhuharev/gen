@@ -10,6 +10,10 @@ import (
     "{{ .project.GoModule }}/infrastructure"
 )
 
+type ReadAccessRulesApplier interface {
+    ApplyReadAccessRules(context.Context) error
+}
+
 type Repo struct {
     infrastructure.Database
 
@@ -50,6 +54,13 @@ func (r *Repo) Get{{ titleName $model.Name }}By{{ titleName .Name }}(ctx context
         return nil, fmt.Errorf("get {{$model.Name}} by {{ .Name }}: %w", err)
     }
 
+    if rulesApplier, ok := interface{}(&u).(ReadAccessRulesApplier); ok {
+        err := rulesApplier.ApplyReadAccessRules(ctx)
+        if err !=nil {
+            return nil, err
+        }
+    }
+
     if r.afterRead{{ titleName $model.Name }} != nil {
         err = r.afterRead{{ titleName $model.Name }}(ctx, r, &u)
         if err != nil {
@@ -59,14 +70,25 @@ func (r *Repo) Get{{ titleName $model.Name }}By{{ titleName .Name }}(ctx context
 
     return &u, nil
 }
-func (r *Repo) List{{ titleName $model.Name }}By{{ titleName .Name }}(ctx context.Context, value {{ goType2 $.project . }}) ([]domain.{{ titleName $model.Name }}, error) {
+func (r *Repo) List{{ titleName $model.Name }}By{{ titleName .Name }}(ctx context.Context, value {{ goType2 $.project . }}, opts ...infrastructure.ListOptions) ([]domain.{{ titleName $model.Name }}, error) {
     var u []domain.{{ titleName $model.Name }}
-    err := r.Database.ListByField(ctx, "{{ titleName .Name }}", value, &u)
+    err := r.Database.ListByField(ctx, "{{ titleName .Name }}", value, &u, opts...)
     if err == infrastructure.ErrNotFound {
         return nil, nil
     }
     if err != nil {
         return nil, fmt.Errorf("get list {{$model.Name}} by {{ .Name }}: %w", err)
+    }
+
+    if len(u) > 0 {
+        if _, ok := interface{}(&u[0]).(ReadAccessRulesApplier); ok {
+            for i := range u {
+                err := interface{}(&u[i]).(ReadAccessRulesApplier).ApplyReadAccessRules(ctx)
+                if err != nil {
+                    return nil, err
+                }
+            }
+        }
     }
 
     if r.afterReadList{{ titleName $model.Name }} != nil {
@@ -118,14 +140,25 @@ func (r *Repo) Update{{ titleName . }}Field(ctx context.Context, model *domain.{
     return nil
 }
 
-func (r *Repo) List{{ titleName . }}(ctx context.Context) ([]domain.{{ titleName . }}, error) {
+func (r *Repo) List{{ titleName . }}(ctx context.Context,opts ...infrastructure.ListOptions) ([]domain.{{ titleName . }}, error) {
     var to []domain.{{ titleName . }}
-    err := r.Database.List(ctx, &to)
+    err := r.Database.List(ctx, &to, opts...)
     if err == infrastructure.ErrNotFound {
         return nil, nil
     }
     if err != nil {
         return nil, fmt.Errorf("get list of {{ titleName . }} from db: %w", err)
+    }
+
+    if len(to) > 0 {
+        if _, ok := interface{}(&to[0]).(ReadAccessRulesApplier); ok {
+            for i := range to {
+                err := interface{}(&to[i]).(ReadAccessRulesApplier).ApplyReadAccessRules(ctx)
+                if err != nil {
+                    return nil, err
+                }
+            }
+        }
     }
 
     if r.afterReadList{{ titleName $model.Name }} != nil {
@@ -138,36 +171,59 @@ func (r *Repo) List{{ titleName . }}(ctx context.Context) ([]domain.{{ titleName
     return to, nil
 }
 
-// TODO: in one request
-func (r *Repo) List{{ titleName . }}ByIDs(ctx context.Context, ids []int) ([]domain.{{ titleName . }}, error) {
-    var to []domain.{{ titleName . }}
-    for _, id := range ids {
-        model, err := r.Get{{ titleName . }}ByID(ctx, id)
-        if err != nil {
-            return nil, err
+func (r *Repo) List{{ titleName . }}ByIDs(ctx context.Context, ids []int, opts ...infrastructure.ListOptions) ([]domain.{{ titleName . }}, error) {
+    list, err := r.List{{ titleName .}}ByFields(ctx, []infrastructure.Field{
+        {
+            Name: r.ColumnByName("ID"),
+            Value: ids,
+            CompareType: infrastructure.CompareTypeIn,
+        },
+    })
+    if err != nil {
+        return nil, err 
+    }
+
+    if len(list) > 0 {
+        if _, ok := interface{}(&list[0]).(ReadAccessRulesApplier); ok {
+            for i := range list {
+                err := interface{}(&list[i]).(ReadAccessRulesApplier).ApplyReadAccessRules(ctx)
+                if err != nil {
+                    return nil, err
+                }
+            }
         }
-        to = append(to, *model)
     }
 
     if r.afterReadList{{ titleName $model.Name }} != nil {
         var err error
-        to, err = r.afterReadList{{ titleName $model.Name }}(ctx, r, to)
+        list, err = r.afterReadList{{ titleName $model.Name }}(ctx, r, list)
         if err != nil {
             return nil, fmt.Errorf("get list callback: %w", err)
         }
     }    
 
-    return to, nil
+    return list, nil
 }
 
-func (r *Repo) List{{ titleName . }}ByFields(ctx context.Context, fields []infrastructure.Field) ([]domain.{{ titleName . }}, error) {
+func (r *Repo) List{{ titleName . }}ByFields(ctx context.Context, fields []infrastructure.Field, opts ...infrastructure.ListOptions) ([]domain.{{ titleName . }}, error) {
     var to []domain.{{ titleName . }}
-    err := r.Database.ListByFields(ctx, fields, &to)
+    err := r.Database.ListByFields(ctx, fields, &to, opts...)
     if err == infrastructure.ErrNotFound {
         return nil, nil
     }
     if err != nil {
         return nil, fmt.Errorf("get list of {{ titleName . }} from db: %w", err)
+    }
+
+    if len(to) > 0 {
+        if _, ok := interface{}(&to[0]).(ReadAccessRulesApplier); ok {
+            for i := range to {
+                err := interface{}(&to[i]).(ReadAccessRulesApplier).ApplyReadAccessRules(ctx)
+                if err != nil {
+                    return nil, err
+                }
+            }
+        }
     }
 
     if r.afterReadList{{ titleName $model.Name }} != nil {
@@ -193,6 +249,13 @@ func (r *Repo) Get{{ titleName . }}ByFields(ctx context.Context, fields []infras
     }
     if err != nil {
         return nil, fmt.Errorf("get {{ titleName . }} from db by fields: %w", err)
+    }
+
+    if rulesApplier, ok := interface{}(&to).(ReadAccessRulesApplier); ok {
+        err := rulesApplier.ApplyReadAccessRules(ctx)
+        if err != nil {
+            return nil, err
+        }
     }
 
     if r.afterRead{{ titleName $model.Name }} != nil {
