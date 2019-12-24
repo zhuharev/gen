@@ -1,0 +1,57 @@
+swagger: "2.0"
+info:
+  title: Sample API
+  description: API description in Markdown.
+  version: 1.0.0
+host: api.example.com
+basePath: /v1
+schemes:
+  - https
+
+
+paths:{{ range (domainServices .project) }}{{ $service := . }}{{ range .Methods }}{{ $method := .}}
+  {{ if (hasParam . )}}/{{ $service.Plural }}/{ {{- paramName . -}} }{{else}}/{{ $service.Plural }}/{{ .Name }}{{ end }}:
+    {{ toLower (httpRESTMethod .) }}:
+      summary: {{ with .Description }}{{ . }}{{ else }}""{{ end }}{{ $length := len .Args }}{{if ne $length 0}}
+      consumes:
+        - application/json
+      parameters:{{if hasParam .}}
+        - name: {{ paramName .}}
+          in: path
+          required: true
+          type: {{ paramJsType $.project . }}{{end}}
+      {{ with .Args }}
+        - in: body
+          name: "request"
+          schema:
+            $ref: "#/definitions/{{ titleName $service.Name }}{{ titleName $method.Name }}Request"{{end}}{{ end }}
+
+      responses:
+        "200":
+          description: OK{{end}}{{ end }}
+
+definitions:{{ range .project.Models }}
+  {{ .Name }}:
+    type: object
+    properties:{{ range .Columns }}
+      {{ .Name }}:
+        type: {{ jsType $.project . }}{{ if .Type.IsEnum }}
+        enum: {{ enumJsArray .Enums "        " }}{{end}}{{ if .Type.IsArray }}
+        items: 
+          type: {{ jsArrayType $.project . }}{{end}}{{ end }}{{ end }}
+{{ range (domainServices .project) }}{{ $service := . }}{{ range .Methods }}
+  {{ titleName $service.Name }}{{ titleName .Name }}Request:
+    type: object
+    properties:{{ $length := len .Args }}{{if ne $length 0}}{{ range .Args }}
+      {{ .Name }}:
+        {{ if .Type.IsModel }}$ref: "#/definitions/{{ .ModelName }}"{{else}}type: {{ jsType $.project .Column }} # {{ .Type }} {{  .Type.IsModel }}{{ if .Type.IsArray }} 
+        items:
+          {{ if .Type.IsModel }}$ref: "#/definitions/{{ .ModelName }}"{{ else }}type: {{ jsArrayType $.project .Column }}{{end}}{{end}}{{ end }}{{ end }}{{ end }}
+  {{ titleName $service.Name }}{{ titleName .Name }}Response:
+    type: object
+    properties:{{ $length := len .Return }}{{if ne $length 0}}{{ range .Return }}
+      {{ .Name }}:
+        type: {{ jsType $.project . }}{{ if .Type.IsArray }} 
+        items: 
+          type: {{ jsArrayType $.project . }}{{end}}{{ end }}{{ end }}
+{{ end }}{{end}}

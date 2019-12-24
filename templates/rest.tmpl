@@ -13,6 +13,18 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
+
+type ReadAccessRulesApplier interface {
+    ApplyReadAccessRules(context.Context)
+}
+
+func applyAccessRules(ctx context.Context, model interface{}) error {
+	if a, ok := model.(ReadAccessRulesApplier); ok {
+		a.ApplyReadAccessRules(ctx)
+	}
+	return nil
+}
+
 // Date is date representation in format: 31.02.2009
 type Date time.Time
 
@@ -32,16 +44,45 @@ func (d *Date) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (d *Date) MarshalJSON() ([]byte, error) {
-	if d == nil {
-		return nil, nil
+func (d Date) MarshalJSON() ([]byte, error) {
+	if time.Time(d).IsZero() {
+		return []byte(`null`), nil
 	}
-	s := time.Time(*d).Format(dateTimeLayout)
+	s := time.Time(d).Format(dateTimeLayout)
 	return []byte(`"` + s + `"`), nil
 }
 
 func (d Date) String() string {
 	return time.Time(d).Format(dateTimeLayout)
+}
+
+type Time time.Time
+
+const timeLayout = "2006-01-02T15:04:05Z07:00"
+
+func (d *Time) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err 
+	}
+	if s == "" {
+		return nil
+	}
+	t, err := time.Parse(timeLayout, s)
+	if err != nil {
+		return err
+	}
+	*d = Time(t)
+	return nil
+}
+
+func (d Time) MarshalJSON() ([]byte, error) {
+	if time.Time(d).IsZero() {
+		return []byte(`null`), nil
+	}
+	s := time.Time(d).Format(timeLayout)
+	return []byte(`"` + s + `"`), nil
 }
 
 type Validator interface {
@@ -87,35 +128,37 @@ var ErrBadRequest = fmt.Errorf("bad request")
 {{ range (nsModels .project .service.Name)}}
 {{ $model := .}}
 type {{ titleName .Name }} struct { {{ range .Columns }}
-  {{ titleName .Name }}     {{ removePackage (deliveryType2 $.project .) "domain" }} {{ if eq .Type.String "password"}} `json:"password"` {{else}} `json:"{{ jsonName .ModelName .Name }}"`{{end}} {{ end }}
+  {{ titleName .Name }}     {{ removePackage (deliveryType2 $.project .) "domain" }} {{ if eq .Type.String "password"}} `json:"password"` {{else}} `json:"{{ jsonName .ModelName .Name }},omitempty"`{{end}} {{ end }}
 }
 
-func convert{{ titleName .Name }}(model *domain.{{ titleName .Name }}) {{ titleName .Name }} {
+func convert{{ titleName .Name }}(ctx context.Context, model *domain.{{ titleName .Name }}) {{ titleName .Name }} {
+	applyAccessRules(ctx, model)
 	return {{ titleName .Name }}{
 		{{ range .Columns }} 
-		{{ titleName .Name }}: {{ if isModel $.project .}}{{ if isArray (.Type) }}convert{{ titleName .ModelName}}List(model.{{ titleName .Name }}){{ else }}convert{{ titleName .ModelName}}(&model.{{ titleName .Name }}){{end}}{{ else if (eq .Type "enum") }}model.{{ titleName .Name }}.Int(){{ else if eq .Type "date" }}Date(model.{{ titleName .Name }}){{ else if eq .Type "password" }}""{{ else }}  model.{{ titleName .Name }}{{end}},   {{ end }}
+		{{ titleName .Name }}: {{ if isModel $.project .}}{{ if isArray (.Type) }}convert{{ titleName .ModelName}}List(ctx, model.{{ titleName .Name }}){{ else }}convert{{ titleName .ModelName}}(ctx, &model.{{ titleName .Name }}){{end}}{{ else if (eq .Type "enum") }}model.{{ titleName .Name }}.Int(){{ else if eq .Type "date" }}Date(model.{{ titleName .Name }}){{ else if eq .Type "time" }}Time(model.{{ titleName .Name }}){{ else if eq .Type "password" }}""{{ else }}  model.{{ titleName .Name }}{{end}},   {{ end }}
 	}
 }
 
-func convert{{ titleName .Name }}ToDomain(model {{ titleName .Name }}) *domain.{{ titleName .Name }} {
+func convert{{ titleName .Name }}ToDomain(ctx context.Context, model {{ titleName .Name }}) *domain.{{ titleName .Name }} {
 	return &domain.{{ titleName .Name }}{
 		{{ range .Columns }} 
-		{{ titleName .Name }}: {{ if isModel $.project .}}{{ if isArray (.Type) }}convert{{ titleName .ModelName}}ListToDomain(model.{{ titleName .Name }}){{ else }}*convert{{ titleName .ModelName}}ToDomain(model.{{ titleName .Name }}){{end}}{{ else if (eq .Type "enum") }}domain.{{ titleName $model.Name }}{{ titleName .Name }}(model.{{ titleName .Name }}){{ else if eq .Type "date" }}time.Time(model.{{ titleName .Name }}){{ else }}  model.{{ titleName .Name }}{{end}},   {{ end }}
+		{{ titleName .Name }}: {{ if isModel $.project .}}{{ if isArray (.Type) }}convert{{ titleName .ModelName}}ListToDomain(ctx, model.{{ titleName .Name }}){{ else }}*convert{{ titleName .ModelName}}ToDomain(ctx, model.{{ titleName .Name }}){{end}}{{ else if (eq .Type "enum") }}domain.{{ titleName $model.Name }}{{ titleName .Name }}(model.{{ titleName .Name }}){{ else if eq .Type "date" }}time.Time(model.{{ titleName .Name }}){{ else if eq .Type "time" }}time.Time(model.{{ titleName .Name }}){{ else }}  model.{{ titleName .Name }}{{end}},   {{ end }}
 	}
 }
 
-func convert{{ titleName .Name }}List(in []domain.{{ titleName .Name }}) []{{ titleName .Name }} {
+func convert{{ titleName .Name }}List(ctx context.Context, in []domain.{{ titleName .Name }}) []{{ titleName .Name }} {
 	res := make([]{{ titleName .Name }}, len(in))
 	for i, v := range in {
-		res[i] = convert{{ titleName .Name }}(&v)
+		applyAccessRules(ctx, &in[i])
+		res[i] = convert{{ titleName .Name }}(ctx, &v)
 	}
 	return res
 }
 
-func convert{{ titleName .Name }}ListToDomain(in []{{ titleName .Name }}) []domain.{{ titleName .Name }} {
+func convert{{ titleName .Name }}ListToDomain(ctx context.Context, in []{{ titleName .Name }}) []domain.{{ titleName .Name }} {
 	res := make([]domain.{{ titleName .Name }}, len(in))
 	for i, v := range in {
-		res[i] = *convert{{ titleName .Name }}ToDomain(v)
+		res[i] = *convert{{ titleName .Name }}ToDomain(ctx, v)
 	}
 	return res
 }
@@ -177,16 +220,17 @@ func (e *EchoDelivery) {{ titleName .Name }}(c echo.Context) error {
 	{{ end }}
 	{{ range .Args }}
 	{{ if isModel $.project .Column }}
-	if validationErrors := convert{{ titleName .Name }}ToDomain(r.{{ titleName .Name }}).Validate(); len(validationErrors) > 0 {
+	if validationErrors := convert{{ titleName .Name }}ToDomain(ctx, r.{{ titleName .Name }}).Validate(); len(validationErrors) > 0 {
 		return c.JSON(500, Error{Code: 400, Message: "validation errors", ValidationErrors: validationErrors})
 	}{{ end }}{{end}}
-	{{ range .Return }} {{ .Name }} ,{{ end }}err := e.usecase.{{ titleName .Name }}(ctx, {{ range .Args }}{{ if isModel $.project .Column}} convert{{ titleName .Name }}ToDomain(r.{{ titleName .Name }}){{ else if eq .Type "date" }}time.Time(r.{{ titleName .Name }}){{ else }}r.{{ titleName .Name }}{{ end }},{{ end }})
+	{{ range .Return }} {{ .Name }} ,{{ end }}err := e.usecase.{{ titleName .Name }}(ctx, {{ range .Args }}{{ if isModel $.project .Column}} convert{{ titleName .Name }}ToDomain(ctx, r.{{ titleName .Name }}){{ else if eq .Type "date" }}time.Time(r.{{ titleName .Name }}){{ else }}r.{{ titleName .Name }}{{ end }},{{ end }})
 	if err != nil {
 		log.Printf("err call method err=%s", err)
 		return c.JSON(500, Error{Code: 500, Message: err.Error()})
 	}
+
 	var resp {{ titleName .Name }}Response
-	{{ range .Return }}{{if isModel $.project .}}resp.{{ titleName .Name }} = {{ convertRepresentation .}}{{else}}resp.{{ titleName .Name }} = {{ .Name }}{{end}}
+	{{ range .Return }}{{if isModel $.project .}}resp.{{ titleName .Name }} = {{ convertRepresentation . }}{{else}}resp.{{ titleName .Name }} = {{ .Name }}{{end}}
 	{{ end }}
    err = c.JSON(200, resp)
    if err != nil {

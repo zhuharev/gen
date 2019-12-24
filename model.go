@@ -51,10 +51,29 @@ type Dep struct {
 
 // Model is buisness-logic model used in services
 type Model struct {
-	Name      string     `json:"name,omitempty"`
-	Type      ModelType  `json:"type,omitempty"`
-	Columns   []Column   `json:"columns,omitempty"`
-	Relations []Relation `json:"relations,omitempty"`
+	Name       string     `json:"name,omitempty"`
+	Plural     string     `json:"plural"`
+	Type       ModelType  `json:"type,omitempty"`
+	Columns    []Column   `json:"columns,omitempty"`
+	Relations  []Relation `json:"relations,omitempty"`
+	Extensions KVs        `json:"extensions,omitempty"`
+}
+
+type KV struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+type KVs []KV
+
+// ValueByName search and return value by name
+func (kvs KVs) ValueByName(name string) string {
+	for _, v := range kvs {
+		if v.Name == name {
+			return v.Value
+		}
+	}
+	return ""
 }
 
 // Relation describe model relation
@@ -250,6 +269,14 @@ func (t ColumnType) IsModel() bool {
 		return ColumnModel == t[2:]
 	}
 	return t == ColumnModel
+}
+
+func (t ColumnType) IsEnum() bool {
+	return t == ColumnEnum
+}
+
+func (t ColumnType) IsArray() bool {
+	return isArray(t)
 }
 
 // Method describe buisness-logic operation

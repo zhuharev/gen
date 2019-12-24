@@ -1,0 +1,284 @@
+package postgres
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"os"
+	"time"
+	"unicode"
+
+    "{{ .project.GoModule }}/infrastructure"
+    "{{ .project.GoModule }}/domain"
+
+    "github.com/go-pg/pg/v9"
+    "github.com/go-pg/pg/v9/orm"
+)
+
+type Repo struct {
+    db orm.DB
+}
+
+
+type QueryLogger struct {
+	logger *log.Logger
+}
+
+func NewQueryLogger(logger *log.Logger) QueryLogger {
+	return QueryLogger{logger: logger}
+}
+
+func (ql QueryLogger) BeforeQuery(ctx context.Context, event *pg.QueryEvent) (context.Context, error) {
+	return ctx, nil
+}
+
+func (ql QueryLogger) AfterQuery(ctx context.Context, event *pg.QueryEvent) error {
+	query, err := event.FormattedQuery()
+	if err != nil {
+		ql.logger.Printf("formatted query err=%s", err)
+	}
+
+	ql.logger.Printf("query=%s duration", query)
+	return nil
+}
+
+func init() {
+    infrastructure.RegisterDatabase("postgres", NewDatabase)
+}
+
+// ie: postgres://god:12345@localhost/test?sslmode=disable
+func NewDatabase(dsn string) (infrastructure.Database, error) {
+    opts, err := pg.ParseURL(dsn)
+    if err !=nil {
+        return nil, fmt.Errorf("parse dsn url: %w", err)
+    }
+    conn := pg.Connect(opts)
+
+	conn.AddQueryHook(NewQueryLogger(log.New(os.Stdout, "Q", log.LstdFlags)))
+    
+    r := &Repo{
+        db: conn,
+    }
+
+	return r, r.migrate()
+}
+
+func (r *Repo) ColumnByName(name string) string {
+	return lcfirst(name) // todo: handle names starts with ID, URL
+}
+
+func (r *Repo) Create(ctx context.Context, model interface{}) error {
+	storeModel, err := getStoreModel(ctx, model)
+	if err != nil {
+		return err
+	}
+	_, err = r.db.Model(storeModel).Insert()
+	if err != nil {
+		return err
+	}
+
+	// TODO: fill from store model to avoid uneccesary conversion
+	domainModel, err := getDomainModel(ctx, storeModel)
+	if err !=nil {
+		return err
+	}
+
+	return fillDomainModel(ctx, model, domainModel)
+}
+
+func (r *Repo) Update(context.Context, interface{}) error {
+	panic("unimplemented")
+}
+
+func (r *Repo) UpdateField(context.Context, interface{}, infrastructure.Field, ...infrastructure.Field) error {
+	panic("unimplemented")
+}
+
+// GetByID fill model from db by ID
+func (r *Repo) GetByID(ctx context.Context, id int, model interface{}) error {
+	storeModel, err := getStoreModel(ctx, model)
+	if err != nil {
+		return err
+	}
+
+	err = setPK(storeModel, id)
+	if err != nil {
+		return err
+	}
+
+	err = r.db.Model(storeModel).WherePK().Select()
+	if err != nil {
+		return err
+	}
+
+	// TODO: fill from store model to avoid uneccesary conversion
+	domainModel, err := getDomainModel(ctx, storeModel)
+	if err !=nil {
+		return err
+	}
+
+	return fillDomainModel(ctx, model, domainModel)
+}
+
+func (r *Repo) GetByField(context.Context, string, interface{}, interface{}) error {
+	panic("unimplemented")
+}
+
+func (r *Repo) GetByFields(context.Context, []infrastructure.Field, interface{}) error {
+	panic("unimplemented")
+}
+
+func (r *Repo) List(context.Context, interface{}, ...infrastructure.ListOptions) error {
+	panic("unimplemented")
+}
+
+func (r *Repo) ListByField(context.Context, string, interface{}, interface{}, ...infrastructure.ListOptions) error {
+	panic("unimplemented")
+}
+
+func (r *Repo) ListByFields(context.Context, []infrastructure.Field, interface{}, ...infrastructure.ListOptions) error {
+	panic("unimplemented")
+}
+
+func (r *Repo) CountByFields(context.Context, []infrastructure.Field, interface{}) (int, error) {
+	panic("unimplemented")
+}
+
+func (r *Repo) Delete(context.Context, interface{}) error {
+	panic("unimplemented")
+}
+
+func (r *Repo) RunInTransaction(context.Context, func(context.Context, infrastructure.Database) error) error {
+	panic("unimplemented")
+}
+
+func (r *Repo) migrate() (err error) {
+	{{ range .project.Models}}{{ $model := .}}
+	err = orm.CreateTable(r.db, &{{ titleName $model.Name }}{}, &orm.CreateTableOptions{IfNotExists: true})
+	if err != nil {
+		return fmt.Errorf("create table for model={{ $model.Name }}: %w", err)
+	}
+	{{ end }}
+	return
+}
+
+// lcfirst lower case first letter of string. Just a helper
+func lcfirst(s string) string {
+	for _, v := range s {
+		u := string(unicode.ToLower(v))
+		return u + s[len(u):]
+	}
+	return ""
+}
+
+// models and converters
+
+// getStoreModel convert domain model to storage representation
+func getStoreModel(ctx context.Context, domainModel interface{}) (interface{}, error) {
+    switch m := domainModel.(type) { {{ range .project.Models}}{{ $model := .}}
+        case *domain.{{ titleName .Name }}:
+            return convert{{ titleName .Name }}(ctx, m), nil{{end}}
+        default:
+            return nil, fmt.Errorf("unknown model: %+v", m)
+    }
+}
+
+// getStoreList convert model array to store representation
+func getStoreList(ctx context.Context, domainModelList interface{}) (interface{}, error) {
+    switch m := domainModelList.(type) { {{ range .project.Models}}{{ $model := .}}
+        case []domain.{{ titleName .Name }}:
+            return convert{{ titleName .Name }}List(ctx, m), nil{{end}}
+        default:
+            return nil, fmt.Errorf("unknown list model: %+v", m)
+    }
+}
+
+func getDomainModel(ctx context.Context, storeModel interface{}) (interface{}, error) {
+    switch m := storeModel.(type) { {{ range .project.Models}}{{ $model := .}}
+        case *{{ titleName .Name }}:
+            return convert{{ titleName .Name }}ToDomain(ctx, m), nil{{end}}
+        default:
+            return nil, fmt.Errorf("unknown model: %+v", m)
+    }
+}
+
+func getDomainModelList(ctx context.Context, storeModelList interface{}) (interface{}, error) {
+    switch m := storeModelList.(type) { {{ range .project.Models}}{{ $model := .}}
+        case []{{ titleName .Name }}:
+            return convert{{ titleName .Name }}ListToDomain(ctx, m), nil{{end}}
+        default:
+            return nil, fmt.Errorf("unknown model: %+v", m)
+    }
+}
+
+func fillDomainModel(ctx context.Context, domainModelFace interface{}, internalDomainModelFace interface{}) error {
+    switch m := domainModelFace.(type) { {{ range .project.Models}}{{ $model := .}}
+        case *domain.{{ titleName .Name }}:
+			if src, ok := internalDomainModelFace.(*domain.{{ titleName .Name }}); ok && src != nil {
+				*m = *src
+			}
+            return nil{{end}}
+        default:
+            return fmt.Errorf("unknown model: %+v", m)
+    }
+}
+
+// getPK return primary key of model
+func getPK(storeModel interface{}) (int, error) {
+    switch m := storeModel.(type) { {{ range .project.Models}}{{ $model := .}}
+        case *{{ titleName .Name }}:
+            return m.ID, nil{{end}}
+        default:
+            return 0, fmt.Errorf("unknown model: %+v", m)
+    }
+}
+
+// setPK set primary key to model
+func setPK(storeModel interface{}, pk int) (error) {
+    switch m := storeModel.(type) { {{ range .project.Models}}{{ $model := .}}
+        case *{{ titleName .Name }}:
+            m.ID = pk
+			return nil{{end}}
+        default:
+            return fmt.Errorf("unknown model: %+v", m)
+    }
+}
+
+{{ range .project.Models}}
+{{ $model := .}}
+type {{ titleName .Name }} struct { 
+    tableName struct{} `sql:"\"{{ tableName $model }}\",alias:t" pg:",discard_unknown_columns"`
+    {{ range .Columns }}
+    {{ titleName .Name }}     {{ removePackage (rawType $.project .) "domain" }} {{ if eq .Type.String "password"}} `json:"password"` {{else}} `pg:"{{ jsonName $model.Name .Name }}{{ if eq .Name "id" }},pk{{end}}"`{{end}} {{ end }}
+}
+
+func convert{{ titleName .Name }}(ctx context.Context, model *domain.{{ titleName .Name }}) *{{ titleName .Name }} {
+	return &{{ titleName .Name }}{
+		{{ range .Columns }} 
+		{{ titleName .Name }}: {{ if isModel $.project .}}{{ if isArray (.Type) }}convert{{ titleName .ModelName}}List(ctx, model.{{ titleName .Name }}){{ else }}*convert{{ titleName .ModelName}}(ctx, &model.{{ titleName .Name }}){{end}}{{ else if (eq .Type "enum") }}model.{{ titleName .Name }}.Int(){{ else if eq .Type "password" }}""{{ else }}  model.{{ titleName .Name }}{{end}},   {{ end }}
+	}
+}
+
+func convert{{ titleName .Name }}ToDomain(ctx context.Context, model *{{ titleName .Name }}) *domain.{{ titleName .Name }} {
+	return &domain.{{ titleName .Name }}{
+		{{ range .Columns }} 
+		{{ titleName .Name }}: {{ if isModel $.project .}}{{ if isArray (.Type) }}convert{{ titleName .ModelName}}ListToDomain(ctx, model.{{ titleName .Name }}){{ else }}*convert{{ titleName .ModelName}}ToDomain(ctx, &model.{{ titleName .Name }}){{end}}{{ else if (eq .Type "enum") }}domain.{{ titleName $model.Name }}{{ titleName .Name }}(model.{{ titleName .Name }}){{ else }}  model.{{ titleName .Name }}{{end}},   {{ end }}
+	}
+}
+
+func convert{{ titleName .Name }}List(ctx context.Context, in []domain.{{ titleName .Name }}) []{{ titleName .Name }} {
+	res := make([]{{ titleName .Name }}, len(in))
+	for i, v := range in {
+		res[i] = *convert{{ titleName .Name }}(ctx, &v)
+	}
+	return res
+}
+
+func convert{{ titleName .Name }}ListToDomain(ctx context.Context, in []{{ titleName .Name }}) []domain.{{ titleName .Name }} {
+	res := make([]domain.{{ titleName .Name }}, len(in))
+	for i, v := range in {
+		res[i] = *convert{{ titleName .Name }}ToDomain(ctx, &v)
+	}
+	return res
+}
+{{ end }}

@@ -1,15 +1,15 @@
 package storm
 
 import (
-    "strings"
-    "context"
-    "log"
+	"context"
+	"fmt"
+	"strings"
 
     "{{ .project.GoModule }}/infrastructure"
-    "{{ .project.GoModule }}/domain"
 
-    "github.com/asdine/storm"
-    "github.com/asdine/storm/q"
+	"github.com/asdine/storm"
+	"github.com/asdine/storm/index"
+	"github.com/asdine/storm/q"
 )
 
 type Repo struct {

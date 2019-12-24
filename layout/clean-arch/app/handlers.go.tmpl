@@ -63,6 +63,7 @@ type UserIDer interface {
 
 func (a *App) registreUploader() {
     {{ if .project.UploadServers }}
+    location := "eu-central-1" //TODO: not used now
     // Initialize minio client object.
 	minioClient, err := minio.New(a.cfg.Upload.Server, a.cfg.Upload.Key, a.cfg.Upload.Secret, true)
 	if err != nil {
@@ -71,7 +72,6 @@ func (a *App) registreUploader() {
     {{ end }}
     {{ range .project.UploadServers}}
 	{{ .Name }}BucketName := "{{ .Name }}"
-	location := "eu-central-1" //TODO: not used now
 
 	err = minioClient.MakeBucket({{ .Name }}BucketName, location)
 	if err != nil {
@@ -103,13 +103,13 @@ func (a *App) registreUploader() {
 		log.Fatalln("set bucket policy", err)
 	}
     a.echo.POST("/api/v1/upload/{{ .Name }}", func(c echo.Context) error {
-        if ider, ok := c.(UserIDer); ok {
-            if id, has := ider.UserID(); !has || id == 0 {
-                return c.JSON(401, "auth required")
-            }
-        } else {
-            return c.JSON(401, "auth required")
-        }
+        //if ider, ok := c.(UserIDer); ok {
+        //    if id, has := ider.UserID(); !has || id == 0 {
+        //        return c.JSON(401, "auth required")
+        //    }
+        //} else {
+        //    return c.JSON(401, "auth required")
+        //}
 
         file, err := c.FormFile("{{ .FileName }}")
         if err != nil {

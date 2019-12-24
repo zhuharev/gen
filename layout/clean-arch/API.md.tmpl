@@ -28,6 +28,7 @@ Rest endpoint: `{{ httpRESTMethod . }}  /{{ $service.Plural }}/{{ .Name }}`{{end
 
 ## Models
 {{ range .project.Models }}### {{ .Name }}
-{{ range .Columns }}- `{{ .Name }}` (type: `{{ goType2 $.project . }}`)
+{{ range .Columns }}- `{{ .Name }}` (type: `{{ jsType $.project . }}`) {{ with .Title }}{{ . }}{{ end }}{{ if .Type.IsEnum }}
+  enum: {{ enumJsArray .Enums "  " }}{{end}}
 {{ end }}
 {{ end }}

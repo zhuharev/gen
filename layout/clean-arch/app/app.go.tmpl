@@ -8,6 +8,7 @@ import (
 
     "{{ $.project.GoModule }}/infrastructure"
     _ "{{ $.project.GoModule }}/infrastructure/database/storm"
+    _ "{{ $.project.GoModule }}/infrastructure/database/postgres"
     "{{ $.project.GoModule }}/infrastructure/job"
     {{ range  (domainServices .project) }}
     "{{ $.project.GoModule }}/domain/{{ .Name }}"

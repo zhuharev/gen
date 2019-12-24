@@ -27,10 +27,13 @@ var tplFuncsMap = template.FuncMap{
 			return string(in)
 		}
 	},
+	"jsType":        jsType,
+	"jsArrayType":   jsArrayType,
 	"goType2":       goType2,
 	"builtInType":   builtInType,
 	"deliveryType":  deliveryType,
 	"deliveryType2": deliveryType2,
+	"rawType":       rawType,
 	"isModel":       isModel,
 	"modelByName":   modelByName,
 	"hasParam": func(method Method) bool {
@@ -61,6 +64,14 @@ var tplFuncsMap = template.FuncMap{
 		for _, arg := range method.Args {
 			if arg.IsRestParam {
 				return jsonName(arg.ModelName, arg.Name)
+			}
+		}
+		return ""
+	},
+	"paramJsType": func(project Project, method Method) string {
+		for _, arg := range method.Args {
+			if arg.IsRestParam {
+				return jsType(project, arg.Column)
 			}
 		}
 		return ""
@@ -157,6 +168,9 @@ var tplFuncsMap = template.FuncMap{
 		}
 		return false
 	},
+	"enumJsArray": enumStringArray,
+	"toLower":     strings.ToLower,
+	"tableName":   tableName,
 }
 
 func enumColumns(model Model) []Column {
@@ -265,9 +279,9 @@ func nsModels(project Project, ns string) []Model {
 
 func convertRepresentation(column Column) string {
 	if isArray(column.Type) {
-		return fmt.Sprintf("convert%[1]sList(%[2]s)", TitleName(string(column.ModelName)), column.Name)
+		return fmt.Sprintf("convert%[1]sList(ctx, %[2]s)", TitleName(string(column.ModelName)), column.Name)
 	}
-	return fmt.Sprintf("convert%[1]s(%[2]s)", TitleName(string(column.ModelName)), column.Name)
+	return fmt.Sprintf("convert%[1]s(ctx, %[2]s)", TitleName(string(column.ModelName)), column.Name)
 }
 
 func makeServiceByType(typ string) func(project Project) []Service {
@@ -333,6 +347,13 @@ func isArray(columnType ColumnType) bool {
 	return strings.HasPrefix(string(columnType), "[]")
 }
 
+func rawType(project Project, column Column) string {
+	if column.Type.IsEnum() {
+		return "int"
+	}
+	return goType2(project, column)
+}
+
 func deliveryType(project Project, column Column) string {
 	if isArray(column.Type) {
 		return strings.ReplaceAll(goType2(project, column), "[]domain.", "[]")
@@ -353,6 +374,9 @@ func deliveryType2(project Project, column Column) string {
 	if column.Type == ColumnEnum {
 		return "int"
 	}
+	if column.Type == ColumnTime {
+		return "Time"
+	}
 	return deliveryType(project, column)
 }
 
@@ -364,6 +388,35 @@ func builtInType(project Project, column Column) string {
 		return "string"
 	}
 	return goType2(project, column)
+}
+
+func jsType(project Project, column Column) string {
+	if column.Type.IsArray() {
+		return "array"
+	} else if column.Type.IsModel() {
+		return "object"
+	} else if column.Type.IsEnum() {
+		return "integer"
+	} else if column.Type == ColumnInt {
+		return "integer"
+	} else if column.Type == ColumnTime {
+		return "string"
+	} else if column.Type == ColumnDate {
+		return "string"
+	} else if column.Type == ColumnFloat {
+		return "number"
+	} else if column.Type == ColumnBool {
+		return "boolean"
+	}
+	return builtInType(project, column)
+}
+
+func jsArrayType(project Project, column Column) string {
+	if !column.Type.IsArray() {
+		panic("not array")
+	}
+	column.Type = ColumnType(strings.TrimPrefix(column.Type.String(), "[]"))
+	return jsType(project, column)
 }
 
 func goType2(project Project, column Column) string {
@@ -489,4 +542,32 @@ func parsePeriod(period string) int {
 		panic("unknown period: " + arr[1])
 	}
 	return int(multiplier * time.Duration(value))
+}
+
+func enumStringArray(enums []Enum, initialPadding string) string {
+	if len(enums) == 0 {
+		return "[]"
+	}
+	b := &strings.Builder{}
+	b.WriteString(initialPadding)
+	b.WriteRune('[')
+	for i, enum := range enums {
+		if i < len(enums)-1 {
+			b.WriteString(fmt.Sprintf("%s  %d, # %s - %s\n", initialPadding, i+1, enum.Name, enum.Title))
+		} else {
+			b.WriteString(fmt.Sprintf("%s  %d # %s - %s\n", initialPadding, i+1, enum.Name, enum.Title))
+		}
+	}
+	b.WriteString(initialPadding)
+	b.WriteRune(']')
+	return b.String()
+}
+
+func tableName(model Model) string {
+	if model.Extensions.ValueByName("tableName") != "" {
+		return model.Extensions.ValueByName("tableName")
+	} else if model.Plural != "" {
+		return model.Plural
+	}
+	return model.Name
 }
