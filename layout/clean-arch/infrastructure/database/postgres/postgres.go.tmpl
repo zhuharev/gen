@@ -86,12 +86,47 @@ func (r *Repo) Create(ctx context.Context, model interface{}) error {
 	return fillDomainModel(ctx, model, domainModel)
 }
 
-func (r *Repo) Update(context.Context, interface{}) error {
-	panic("unimplemented")
+func (r *Repo) Update(ctx context.Context, model interface{}) error {
+	storeModel, err := getStoreModel(ctx, model)
+	if err != nil {
+		return err
+	}
+	_, err = r.db.Model(storeModel).WherePK().Update()
+	if err != nil {
+		return err
+	}
+
+	// TODO: fill from store model to avoid uneccesary conversion
+	domainModel, err := getDomainModel(ctx, storeModel)
+	if err !=nil {
+		return err
+	}
+
+	return fillDomainModel(ctx, model, domainModel)
 }
 
-func (r *Repo) UpdateField(context.Context, interface{}, infrastructure.Field, ...infrastructure.Field) error {
-	panic("unimplemented")
+func (r *Repo) UpdateField(ctx context.Context, model interface{}, field infrastructure.Field, fields ...infrastructure.Field) error {
+	storeModel, err := getStoreModel(ctx, model)
+	if err != nil {
+		return err
+	}
+	var columnNames = []string{field.Name}
+	for _, f := range fields {
+		columnNames = append(columnNames, f.Name)
+	}
+
+	_, err = r.db.Model(storeModel).WherePK().Column(columnNames...).Update()
+	if err != nil {
+		return err
+	}
+
+	// TODO: fill from store model to avoid uneccesary conversion
+	domainModel, err := getDomainModel(ctx, storeModel)
+	if err !=nil {
+		return err
+	}
+
+	return fillDomainModel(ctx, model, domainModel)
 }
 
 // GetByID fill model from db by ID
@@ -120,36 +155,155 @@ func (r *Repo) GetByID(ctx context.Context, id int, model interface{}) error {
 	return fillDomainModel(ctx, model, domainModel)
 }
 
-func (r *Repo) GetByField(context.Context, string, interface{}, interface{}) error {
-	panic("unimplemented")
+func (r *Repo) GetByField(ctx context.Context, fieldName string, value interface{}, model interface{}) error {
+	storeModel, err := getStoreModel(ctx, model)
+	if err != nil {
+		return err
+	}
+
+	err = r.db.Model(storeModel).Where("? = ?", pg.F(fieldName), value).Select()
+	if err != nil {
+		return err
+	}
+
+	// TODO: fill from store model to avoid uneccesary conversion
+	domainModel, err := getDomainModel(ctx, storeModel)
+	if err !=nil {
+		return err
+	}
+
+	return fillDomainModel(ctx, model, domainModel)
 }
 
-func (r *Repo) GetByFields(context.Context, []infrastructure.Field, interface{}) error {
-	panic("unimplemented")
+func (r *Repo) GetByFields(ctx context.Context, fields []infrastructure.Field, model interface{}) error {
+	storeModel, err := getStoreModel(ctx, model)
+	if err != nil {
+		return err
+	}
+
+	q := r.db.Model(storeModel)
+	for _, f := range fields {
+		q.Where("? = ?", pg.F(f.Name), f.Value)
+	}
+
+	err = q.Select()
+	if err != nil {
+		return err
+	}
+
+	// TODO: fill from store model to avoid uneccesary conversion
+	domainModel, err := getDomainModel(ctx, storeModel)
+	if err !=nil {
+		return err
+	}
+
+	return fillDomainModel(ctx, model, domainModel)
 }
 
-func (r *Repo) List(context.Context, interface{}, ...infrastructure.ListOptions) error {
-	panic("unimplemented")
+func (r *Repo) List(ctx context.Context, modelList interface{}, opts ...infrastructure.ListOptions) error {
+	storeModel, err := getStoreModel(ctx, modelList)
+	if err != nil {
+		return err
+	}
+
+	pkName, err := pkName(storeModel)
+	if err != nil {
+		return err
+	}
+	q := r.db.Model(storeModel).OrderExpr("? DESC", pg.F(pkName))
+
+	err = q.Select()
+	if err != nil {
+		return err
+	}
+
+	// TODO: fill from store model to avoid uneccesary conversion
+	domainModel, err := getDomainModel(ctx, storeModel)
+	if err !=nil {
+		return err
+	}
+
+	return fillDomainModel(ctx, modelList, domainModel)
 }
 
-func (r *Repo) ListByField(context.Context, string, interface{}, interface{}, ...infrastructure.ListOptions) error {
-	panic("unimplemented")
+func (r *Repo) ListByField(ctx context.Context, fieldName string, value interface{}, model interface{}, opts ...infrastructure.ListOptions) error {
+	storeModel, err := getStoreModel(ctx, model)
+	if err != nil {
+		return err
+	}
+
+	err = r.db.Model(storeModel).Where("? = ?", pg.F(fieldName), value).Select()
+	if err != nil {
+		return err
+	}
+
+	// TODO: fill from store model to avoid uneccesary conversion
+	domainModel, err := getDomainModel(ctx, storeModel)
+	if err !=nil {
+		return err
+	}
+
+	return fillDomainModel(ctx, model, domainModel)
 }
 
-func (r *Repo) ListByFields(context.Context, []infrastructure.Field, interface{}, ...infrastructure.ListOptions) error {
-	panic("unimplemented")
+func (r *Repo) ListByFields(ctx context.Context, fields []infrastructure.Field, model interface{}, opts ...infrastructure.ListOptions) error {
+	storeModel, err := getStoreModel(ctx, model)
+	if err != nil {
+		return err
+	}
+
+	q := r.db.Model(storeModel)
+	for _, f := range fields {
+		q.Where("? = ?", pg.F(f.Name), f.Value)
+	}
+
+	err = q.Select()
+	if err != nil {
+		return err
+	}
+
+	// TODO: fill from store model to avoid uneccesary conversion
+	domainModel, err := getDomainModel(ctx, storeModel)
+	if err !=nil {
+		return err
+	}
+
+	return fillDomainModel(ctx, model, domainModel)
 }
 
-func (r *Repo) CountByFields(context.Context, []infrastructure.Field, interface{}) (int, error) {
-	panic("unimplemented")
+func (r *Repo) CountByFields(ctx context.Context, fields []infrastructure.Field, model interface{}) (int, error) {
+	storeModel, err := getStoreModel(ctx, model)
+	if err != nil {
+		return 0, err
+	}
+
+	q := r.db.Model(storeModel)
+	for _, f := range fields {
+		q.Where("? = ?", pg.F(f.Name), f.Value)
+	}
+
+	return q.Count()
 }
 
-func (r *Repo) Delete(context.Context, interface{}) error {
-	panic("unimplemented")
+func (r *Repo) Delete(ctx context.Context, model interface{}) error {
+	storeModel, err := getStoreModel(ctx, model)
+	if err != nil {
+		return err
+	}
+	_, err = r.db.Model(storeModel).WherePK().Delete()
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-func (r *Repo) RunInTransaction(context.Context, func(context.Context, infrastructure.Database) error) error {
-	panic("unimplemented")
+func (r *Repo) RunInTransaction(ctx context.Context, fn func(ctx context.Context, repo infrastructure.Database) error) error {
+	if conn, ok := r.db.(*pg.Conn); ok {
+		return conn.RunInTransaction(func(tx *pg.Tx) error {
+			return fn(ctx, &Repo{db: tx})
+		})
+	}
+	return fmt.Errorf("cannot start transaction")
 }
 
 func (r *Repo) migrate() (err error) {
@@ -177,35 +331,20 @@ func lcfirst(s string) string {
 func getStoreModel(ctx context.Context, domainModel interface{}) (interface{}, error) {
     switch m := domainModel.(type) { {{ range .project.Models}}{{ $model := .}}
         case *domain.{{ titleName .Name }}:
-            return convert{{ titleName .Name }}(ctx, m), nil{{end}}
+            return convert{{ titleName .Name }}(ctx, m), nil
+		case *[]domain.{{ titleName .Name }}:
+            return convert{{ titleName .Name }}ListPtr(ctx, m), nil{{end}}
         default:
             return nil, fmt.Errorf("unknown model: %+v", m)
-    }
-}
-
-// getStoreList convert model array to store representation
-func getStoreList(ctx context.Context, domainModelList interface{}) (interface{}, error) {
-    switch m := domainModelList.(type) { {{ range .project.Models}}{{ $model := .}}
-        case []domain.{{ titleName .Name }}:
-            return convert{{ titleName .Name }}List(ctx, m), nil{{end}}
-        default:
-            return nil, fmt.Errorf("unknown list model: %+v", m)
     }
 }
 
 func getDomainModel(ctx context.Context, storeModel interface{}) (interface{}, error) {
     switch m := storeModel.(type) { {{ range .project.Models}}{{ $model := .}}
         case *{{ titleName .Name }}:
-            return convert{{ titleName .Name }}ToDomain(ctx, m), nil{{end}}
-        default:
-            return nil, fmt.Errorf("unknown model: %+v", m)
-    }
-}
-
-func getDomainModelList(ctx context.Context, storeModelList interface{}) (interface{}, error) {
-    switch m := storeModelList.(type) { {{ range .project.Models}}{{ $model := .}}
-        case []{{ titleName .Name }}:
-            return convert{{ titleName .Name }}ListToDomain(ctx, m), nil{{end}}
+            return convert{{ titleName .Name }}ToDomain(ctx, m), nil
+		case *[]{{ titleName .Name }}:
+            return convert{{ titleName .Name }}ListToDomainPtr(ctx, m), nil{{end}}
         default:
             return nil, fmt.Errorf("unknown model: %+v", m)
     }
@@ -217,7 +356,12 @@ func fillDomainModel(ctx context.Context, domainModelFace interface{}, internalD
 			if src, ok := internalDomainModelFace.(*domain.{{ titleName .Name }}); ok && src != nil {
 				*m = *src
 			}
-            return nil{{end}}
+            return nil
+		case *[]domain.{{ titleName .Name }}:
+			if src, ok := internalDomainModelFace.(*[]domain.{{ titleName .Name }}); ok && src != nil {
+				*m = *src
+			}
+			return nil{{end}}
         default:
             return fmt.Errorf("unknown model: %+v", m)
     }
@@ -241,6 +385,18 @@ func setPK(storeModel interface{}, pk int) (error) {
 			return nil{{end}}
         default:
             return fmt.Errorf("unknown model: %+v", m)
+    }
+}
+
+// pkName set primary key to model
+func pkName(storeModel interface{}) (string, error) {
+    switch m := storeModel.(type) { {{ range .project.Models}}{{ $model := .}}
+        case *{{ titleName .Name }}:
+            return "{{ jsonName $model.Name .Name }}", nil
+		case *[]{{ titleName .Name }}:
+			return "{{ jsonName $model.Name .Name }}", nil{{end}}
+        default:
+            return "", fmt.Errorf("unknown model: %+v", m)
     }
 }
 
@@ -274,11 +430,27 @@ func convert{{ titleName .Name }}List(ctx context.Context, in []domain.{{ titleN
 	return res
 }
 
+func convert{{ titleName .Name }}ListPtr(ctx context.Context, in *[]domain.{{ titleName .Name }}) *[]{{ titleName .Name }} {
+	res := make([]{{ titleName .Name }}, len(*in))
+	for i, v := range *in {
+		res[i] = *convert{{ titleName .Name }}(ctx, &v)
+	}
+	return &res
+}
+
 func convert{{ titleName .Name }}ListToDomain(ctx context.Context, in []{{ titleName .Name }}) []domain.{{ titleName .Name }} {
 	res := make([]domain.{{ titleName .Name }}, len(in))
 	for i, v := range in {
 		res[i] = *convert{{ titleName .Name }}ToDomain(ctx, &v)
 	}
 	return res
+}
+
+func convert{{ titleName .Name }}ListToDomainPtr(ctx context.Context, in *[]{{ titleName .Name }}) *[]domain.{{ titleName .Name }} {
+	res := make([]domain.{{ titleName .Name }}, len(*in))
+	for i, v := range *in {
+		res[i] = *convert{{ titleName .Name }}ToDomain(ctx, &v)
+	}
+	return &res
 }
 {{ end }}

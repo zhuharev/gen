@@ -18,7 +18,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/gobuffalo/packr/v2"
+	"github.com/markbates/pkger"
 )
 
 // Generate create folder structure and generate stubs
@@ -223,6 +223,7 @@ func createFileOrDir(fpath string) (err error) {
 
 	if !isDir {
 		dirName = filepath.Dir(fpath)
+		log.Printf("mkdir all: %s", dirName)
 		err = os.MkdirAll(dirName, os.ModePerm)
 		if err != nil {
 			return
@@ -265,22 +266,40 @@ func createModels(targetDir string, project Project) error {
 }
 
 func createStructure(targetDir string, project Project) error {
-	const layout = "clean-arch"
+	const layout = "layout/clean-arch"
 
-	box := packr.New("layout", "./layout")
-
-	list := box.List()
-
-	for i, fpath := range list {
-		fpath = strings.TrimPrefix(fpath, layout)
-		targetPath := strings.TrimSuffix(filepath.Join(targetDir, fpath), ".tmpl")
-		err := createFileOrDir(targetPath)
+	err := pkger.Walk("/layout", func(path string, info os.FileInfo, err error) error {
+		fpath := strings.ReplaceAll(path, "github.com/zhuharev/gen:/", "")
 		if err != nil {
 			return err
 		}
-		data, err := box.Find(list[i])
-		if strings.HasSuffix(list[i], ".tmpl") {
-			tpl, err := template.New(list[i]).Funcs(tplFuncsMap).Parse(string(data))
+		fpath = strings.TrimPrefix(fpath, layout)
+		targetPath := strings.TrimSuffix(filepath.Join(targetDir, fpath), ".tmpl")
+
+		fmt.Printf(
+			"%s %s\n",
+			path,
+			targetPath,
+		)
+		//return nil
+
+		err = createFileOrDir(targetPath)
+		if err != nil {
+			return fmt.Errorf("create file or dir: %w", err)
+		}
+
+		if info.IsDir() {
+			return nil
+		}
+
+		f, err := pkger.Open(path)
+		if err != nil {
+			return err
+		}
+
+		data, err := ioutil.ReadAll(f)
+		if strings.HasSuffix(fpath, ".tmpl") {
+			tpl, err := template.New(fpath).Funcs(tplFuncsMap).Parse(string(data))
 			if err != nil {
 				return fmt.Errorf("parse templates: %w", err)
 			}
@@ -303,7 +322,7 @@ func createStructure(targetDir string, project Project) error {
 			if (strings.HasSuffix(fpath, ".md") || strings.HasSuffix(fpath, ".md.tmpl")) && fpath != "/API.md.tmpl" {
 				if exists, _ := isFileExist(targetPath); exists {
 					log.Printf("file %s exists, skip create", targetPath)
-					continue
+					return nil
 				}
 			}
 
@@ -311,12 +330,12 @@ func createStructure(targetDir string, project Project) error {
 			if err != nil {
 				return err
 			}
-			continue
+			return nil
 		} else if strings.HasSuffix(targetPath, ".md") {
 			// Do not overwrite .md files
 			if exists, _ := isFileExist(targetPath); exists {
 				//log.Printf("file %s exists, skip create", targetPath)
-				continue
+				return nil
 			}
 		}
 
@@ -324,7 +343,7 @@ func createStructure(targetDir string, project Project) error {
 		if fpath == "/app/config.go" || fpath == "/conf/config.yml" {
 			if exists, _ := isFileExist(targetPath); exists {
 				log.Printf("file %s exists, skip create", targetPath)
-				continue
+				return nil
 			}
 		}
 
@@ -332,7 +351,12 @@ func createStructure(targetDir string, project Project) error {
 		if err != nil {
 			return err
 		}
+		return nil
+	})
+	if err != nil {
+		log.Fatalln(err)
 	}
+
 	return generateServices(targetDir, project)
 }
 

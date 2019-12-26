@@ -9,6 +9,8 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+const version = "0.0.1"
+
 func main() {
 	app := &cli.App{
 		Commands: []*cli.Command{
@@ -37,6 +39,8 @@ var CmdGenerate = &cli.Command{
 
 func runGenerator(ctx *cli.Context) error {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
+	log.Printf("gen version=%s", version)
 
 	f, err := os.Open(ctx.String("c"))
 	if err != nil {
