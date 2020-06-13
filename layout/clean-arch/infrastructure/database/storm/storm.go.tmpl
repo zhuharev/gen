@@ -108,7 +108,7 @@ func (r *Repo) ListByFields(_ context.Context, fields []infrastructure.Field, re
         switch f.CompareType {
             case infrastructure.CompareTypeIn:
                 matchers = append(matchers, q.In(f.Name, f.Value))
-            case infrastructure.CompareTypeEq:
+            case infrastructure.CompareTypeEquals:
                 matchers = append(matchers, q.Eq(f.Name, f.Value))
             default:
                 return fmt.Errorf("unknown compare type: %d", f.CompareType)
@@ -144,7 +144,7 @@ func (r *Repo) CountByFields(_ context.Context, fields []infrastructure.Field, r
         switch f.CompareType {
             case infrastructure.CompareTypeIn:
                 matchers = append(matchers, q.In(f.Name, f.Value))
-            case infrastructure.CompareTypeEq:
+            case infrastructure.CompareTypeEquals:
                 matchers = append(matchers, q.Eq(f.Name, f.Value))
             default:
                 return 0, fmt.Errorf("unknown compare type: %d", f.CompareType)
@@ -159,7 +159,7 @@ func (r *Repo) GetByFields(_ context.Context, fields []infrastructure.Field, res
         switch f.CompareType {
             case infrastructure.CompareTypeIn:
                 matchers = append(matchers, q.In(f.Name, f.Value))
-            case infrastructure.CompareTypeEq:
+            case infrastructure.CompareTypeEquals:
                 matchers = append(matchers, q.Eq(f.Name, f.Value))
             default:
                 return fmt.Errorf("unknown compare type: %d", f.CompareType)

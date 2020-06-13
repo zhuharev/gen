@@ -41,8 +41,15 @@ type Field struct {
 type CompareType int
 
 const (
-	CompareTypeEq CompareType = iota
+	CompareTypeEquals CompareType = iota
 	CompareTypeIn
+	CompareTypeGreater
+	CompareTypeGE
+	CompareTypeLess
+	CompareTypeLE
+	CompareTypeNull
+	CompareTypeLike
+	CompareTypeILike
 )
 
 type ListOptions struct {

@@ -3,8 +3,15 @@
 package app
 
 import (
-    "crypto/sha256"
-    "io"
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"strings"
+	"time"
 
     "{{ $.project.GoModule }}/infrastructure"
 {{ range (domainServices .project) }}
@@ -21,7 +28,7 @@ func (a *App) registreHandlers() {
     a.registreRPC()
     a.registreTelegram()
     a.registreSchema()
-    a.registreUploader()
+    //a.registreUploader()
 
     a.echo.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
         return func (ctx echo.Context) error {
@@ -111,16 +118,24 @@ func (a *App) registreUploader() {
         //    return c.JSON(401, "auth required")
         //}
 
-        file, err := c.FormFile("{{ .FileName }}")
-        if err != nil {
-            return c.JSON(500, map[string]string{"error":fmt.Sprintf("get form file: %s", err)})
-        }
+		var src io.ReadCloser
 
-        src, err := file.Open()
-        if err != nil {
-            return c.JSON(500, err.Error())
-        }
-        defer src.Close()
+		// try get file from body if request not multipart
+		if !strings.HasPrefix(strings.ToLower(c.Request().Header.Get("Content-Type")), "multipart/form-data") {
+			src = c.Request().Body
+			defer src.Close()
+		} else {
+			file, err := c.FormFile("file")
+			if err != nil {
+				return c.JSON(500, map[string]string{"error": fmt.Sprintf("get form file: %s", err)})
+			}
+
+			src, err = file.Open()
+			if err != nil {
+				return c.JSON(500, err.Error())
+			}
+			defer src.Close()
+		}
 
         h := sha256.New()
 

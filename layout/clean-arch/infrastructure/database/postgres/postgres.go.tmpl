@@ -64,6 +64,9 @@ func NewDatabase(dsn string) (infrastructure.Database, error) {
 }
 
 func (r *Repo) ColumnByName(name string) string {
+	if strings.ToLower(name) == "id" {
+		return "id"
+	}
 	return lcfirst(name) // todo: handle names starts with ID, URL
 }
 
@@ -161,7 +164,9 @@ func (r *Repo) GetByField(ctx context.Context, fieldName string, value interface
 		return err
 	}
 
-	err = r.db.Model(storeModel).Where("? = ?", pg.F(fieldName), value).Select()
+	q := r.db.Model(storeModel)
+	q = applyFieldFilter(q, infrastructure.Field{Name: fieldName, Value: value})
+	err = q.Select()
 	if err != nil {
 		return err
 	}
@@ -183,7 +188,7 @@ func (r *Repo) GetByFields(ctx context.Context, fields []infrastructure.Field, m
 
 	q := r.db.Model(storeModel)
 	for _, f := range fields {
-		q.Where("? = ?", pg.F(f.Name), f.Value)
+		q = applyFieldFilter(q, f)
 	}
 
 	err = q.Select()
@@ -306,7 +311,20 @@ func (r *Repo) RunInTransaction(ctx context.Context, fn func(ctx context.Context
 	return fmt.Errorf("cannot start transaction")
 }
 
+// version table will save current schema version in database for migrate. Should have one row with id==1
+type Version struct {
+	tableName struct{} `sql:"\"version\",alias:t" pg:",discard_unknown_columns"`
+
+	ID int
+	Version int
+}
+
 func (r *Repo) migrate() (err error) {
+	// create version table
+	err = orm.CreateTable(r.db, new(Version), &orm.CreateTableOptions{IfNotExists: true})
+	if err != nil {
+		return fmt.Errorf("create version table: %w", err)
+	}
 	{{ range .project.Models}}{{ $model := .}}
 	err = orm.CreateTable(r.db, &{{ titleName $model.Name }}{}, &orm.CreateTableOptions{IfNotExists: true})
 	if err != nil {
@@ -392,9 +410,9 @@ func setPK(storeModel interface{}, pk int) (error) {
 func pkName(storeModel interface{}) (string, error) {
     switch m := storeModel.(type) { {{ range .project.Models}}{{ $model := .}}
         case *{{ titleName .Name }}:
-            return "{{ jsonName $model.Name .Name }}", nil
+            return "{{ jsonName $model.Name .Name }}Id", nil
 		case *[]{{ titleName .Name }}:
-			return "{{ jsonName $model.Name .Name }}", nil{{end}}
+			return "{{ jsonName $model.Name .Name }}Id", nil{{end}}
         default:
             return "", fmt.Errorf("unknown model: %+v", m)
     }
@@ -454,3 +472,23 @@ func convert{{ titleName .Name }}ListToDomainPtr(ctx context.Context, in *[]{{ t
 	return &res
 }
 {{ end }}
+
+func applyFieldFilter(q *orm.Query, field infrastructure.Field) (*orm.Query) {
+	if field.CompareType == 0 {
+		field.CompareType = infrastructure.CompareTypeEquals
+	}
+	st := searchTypesMap[field.CompareType]
+	return q.Where("? ?", pg.F(field.Name), pg.Q(st, field.Value))
+}
+
+var searchTypesMap = map[infrastructure.CompareType]string{
+	infrastructure.CompareTypeEquals:		"= ?",
+	infrastructure.CompareTypeNull:			"is null",
+	infrastructure.CompareTypeGE:			">= ?",
+	infrastructure.CompareTypeLE:			"<= ?",
+	infrastructure.CompareTypeGreater:		"> ?",
+	infrastructure.CompareTypeLess:			"< ?",
+	infrastructure.CompareTypeLike:			"like ?",
+	infrastructure.CompareTypeILike:			"ilike ?",
+	infrastructure.CompareTypeIn:			"in (?)",
+}

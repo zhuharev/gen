@@ -319,7 +319,9 @@ func createStructure(targetDir string, project Project) error {
 			}
 
 			// Do not overwrite existsing md files
-			if (strings.HasSuffix(fpath, ".md") || strings.HasSuffix(fpath, ".md.tmpl")) && fpath != "/API.md.tmpl" {
+			if (strings.HasSuffix(fpath, ".md") || strings.HasSuffix(fpath, ".md.tmpl")) &&
+				fpath != "/API.md.tmpl" &&
+				(strings.HasSuffix(fpath, ".mod") || strings.HasSuffix(fpath, ".mod.tmpl")) {
 				if exists, _ := isFileExist(targetPath); exists {
 					log.Printf("file %s exists, skip create", targetPath)
 					return nil

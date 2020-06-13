@@ -45,7 +45,7 @@ func (r *Repo) RunInTransaction(ctx context.Context, fn func(context.Context, *R
 {{ else }}
 func (r *Repo) Get{{ titleName $model.Name }}By{{ titleName .Name }}(ctx context.Context, value {{ goType2 $.project . }}) (*domain.{{ titleName $model.Name }}, error) {
     var u domain.{{ titleName $model.Name }}
-    err := r.Database.GetByField(ctx, "{{ titleName .Name }}", value, &u)
+    err := r.Database.GetByField(ctx,  domain.Columns.{{ titleName $model.Name }}.{{ titleName .Name }}, value, &u)
     if err != nil {
         return nil, fmt.Errorf("get {{$model.Name}} by {{ .Name }}: %w", err)
     }
@@ -61,7 +61,7 @@ func (r *Repo) Get{{ titleName $model.Name }}By{{ titleName .Name }}(ctx context
 }
 func (r *Repo) List{{ titleName $model.Name }}By{{ titleName .Name }}(ctx context.Context, value {{ goType2 $.project . }}, opts ...infrastructure.ListOptions) ([]domain.{{ titleName $model.Name }}, error) {
     var u []domain.{{ titleName $model.Name }}
-    err := r.Database.ListByField(ctx, "{{ titleName .Name }}", value, &u, opts...)
+    err := r.Database.ListByField(ctx, domain.Columns.{{ titleName $model.Name }}.{{ titleName .Name }}, value, &u, opts...)
     if err == infrastructure.ErrNotFound {
         return nil, nil
     }
@@ -139,9 +139,12 @@ func (r *Repo) List{{ titleName . }}(ctx context.Context,opts ...infrastructure.
 }
 
 func (r *Repo) List{{ titleName . }}ByIDs(ctx context.Context, ids []int, opts ...infrastructure.ListOptions) ([]domain.{{ titleName . }}, error) {
+    if len(ids) == 0 {
+        return nil, nil
+    }
     list, err := r.List{{ titleName .}}ByFields(ctx, []infrastructure.Field{
         {
-            Name: r.ColumnByName("ID"),
+            Name: domain.Columns.{{ titleName . }}.ID,
             Value: ids,
             CompareType: infrastructure.CompareTypeIn,
         },

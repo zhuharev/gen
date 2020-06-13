@@ -2,7 +2,8 @@ tools:
 	go get modernc.org/assets
 
 build: generate
-	rm ./bin/gen
+	#rm ./bin/gen
+	#rm cmd/gen/pkged.go
 	@go install ./...
 	@go build -o ./bin/gen ./cmd/gen/*.go
 
@@ -13,7 +14,6 @@ all: build
 	@go run cmd/gen/gen.go
 
 play: build 
-	rm cmd/gen/pkged.go
 	rm -rf play/generated
 	pkger -o cmd/gen
 	cd play && ../bin/gen generate -c cfg.yml -o generated && cd ..

@@ -17,15 +17,21 @@ type UsecaseImp struct{
   {{end}}
 
   *zap.Logger
+  cfg Config
 }
 
-func NewUsecase(logger *zap.Logger, {{ if (isServiceWithRepo .service)}}repo *Repo,{{end}} {{ range .service.Deps }}{{.Name}}Uc {{servicePkg $.project .Name}}.{{usecaseName $.project .Name}},{{end}}) Usecase {
+type Config struct {
+
+}
+
+func NewUsecase(logger *zap.Logger, cfg Config, {{ if (isServiceWithRepo .service)}}repo *Repo,{{end}} {{ range .service.Deps }}{{.Name}}Uc {{servicePkg $.project .Name}}.{{usecaseName $.project .Name}},{{end}}) Usecase {
     return &UsecaseImp{
         {{ if (isServiceWithRepo .service)}}repo: repo,{{end}}
         {{ range .service.Deps }}
         {{.Name}}Uc:  {{.Name}}Uc,
         {{end}}
         Logger: logger,
+        cfg: cfg,
     }
 }
 
