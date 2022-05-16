@@ -8,5 +8,5 @@ require (
 	github.com/smartystreets/goconvey v1.6.4
 	github.com/urfave/cli/v2 v2.0.0-alpha.2
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
-	gopkg.in/yaml.v2 v2.2.7
+	gopkg.in/yaml.v2 v2.2.8
 )
